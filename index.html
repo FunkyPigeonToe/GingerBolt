@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Gingerbolt Fresh</title>
+<title>Gingerbolt – Mobile</title>
 <style>
-  :root{ --vh:1vh; --bg:#0f1320; --ink:#ffffff; --accent:#ff6fa3; --indigo:#5865F2; }
+  :root{ --vh:1vh; --bg:#0e121a; --ink:#fff; --accent:#ff6fa3; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{
     margin:0; padding:0; height:100%; overflow:hidden; background:#000; color:var(--ink);
@@ -13,35 +13,43 @@
     -webkit-user-select:none; user-select:none;
   }
   canvas{
-    display:block; width:100vw; height:calc(var(--vh) * 100);
-    background:#000; margin:0 auto;
-    position:relative; z-index:0;
+    display:block; width:100vw; height:calc(var(--vh) * 100); background:#000; margin:0 auto; position:relative; z-index:0;
+    backface-visibility:hidden; transform:translateZ(0);
   }
 
-  /* Start UI */
+  /* Start screen */
   .stack{ position:fixed; left:50%; transform:translateX(-50%); width:min(92vw,560px); z-index:10; pointer-events:auto; }
   .stack[hidden]{ display:none; }
-  #front{ top:18vh; display:flex; flex-direction:column; gap:14px; align-items:center; text-align:center; }
+  #front{ top:14vh; display:flex; flex-direction:column; gap:14px; align-items:center; text-align:center; }
   .title{ font-weight:900; font-size:clamp(36px,10vw,84px); letter-spacing:1px; text-shadow:0 0 30px rgba(255,255,255,.55); }
-  .sub{ opacity:.95; max-width:42ch; line-height:1.4 }
+  .sub{ opacity:.95; max-width:44ch; line-height:1.45 }
   .btn{
     background:linear-gradient(180deg,#ffd3e3,#ff6fa3);
-    color:#2b0f1b; border:0; padding:14px 24px; border-radius:18px; font-weight:800;
+    color:#220b16; border:0; padding:14px 24px; border-radius:18px; font-weight:800;
     box-shadow:0 10px 28px rgba(0,0,0,.35); cursor:pointer; font-size:18px; min-width:220px;
   }
   .btn:active{ transform:translateY(1px) scale(.98); }
 
-  /* Mobile controls */
+  /* Mobile controls only (no desktop) */
   .controls{ position:fixed; inset:0; pointer-events:none; z-index:6; }
   .controls[hidden]{ display:none; }
   .laneBtn{
-    position:absolute; width:86px; height:86px; border-radius:20px; border:0;
-    background:rgba(20,24,30,.5); color:#fff; font-size:28px;
+    position:absolute; width:88px; height:88px; border-radius:22px; border:0;
+    background:rgba(15,18,26,.54); color:#fff; font-size:28px;
     box-shadow:0 10px 26px rgba(0,0,0,.4); pointer-events:auto; transform:translate(-50%,-50%);
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(8px);
   }
   .laneBtn:active{ transform:translate(-50%,-50%) scale(.96); }
+  /* hide controls on big screens just in case */
   @media (min-width:900px){ .controls{ display:none !important; } }
+
+  /* HUD */
+  .chip{
+    position:fixed; left:12px; top:12px; z-index:8; background:rgba(0,0,0,.35); padding:8px 12px; border-radius:12px; font-size:14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.35);
+  }
+  .chip2{ top:48px; }
+  .chip3{ top:84px; }
 </style>
 </head>
 <body>
@@ -50,15 +58,20 @@
   <!-- Start screen -->
   <div id="front" class="stack">
     <div class="title">GINGERBOLT</div>
-    <div class="sub">Arcade lane runner. Weave past trees and mud, snack for energy, and tap ⚡ to dash. Set a new global best.</div>
-    <button id="start" class="btn" type="button">Start Game</button>
+    <div class="sub">Mobile arcade runner. Weave past trees and mud, snack to keep energy up, and enjoy a living sky that rolls from day to night.</div>
+    <button id="start" class="btn" type="button">Start</button>
   </div>
 
-  <!-- Touch arrows -->
+  <!-- Touch arrows (mobile only) -->
   <div id="controls" class="controls" hidden>
     <button id="left"  class="laneBtn" aria-label="Left">◀</button>
     <button id="right" class="laneBtn" aria-label="Right">▶</button>
   </div>
+
+  <!-- HUD chips -->
+  <div id="hudScore" class="chip"  hidden>Score: 0</div>
+  <div id="hudFuel"  class="chip chip2" hidden>Energy: 100</div>
+  <div id="hudDist"  class="chip chip3" hidden>Meters: 0</div>
 
 <script>
 /* ========================= real vh for iOS ========================= */
@@ -66,28 +79,14 @@ function setVH(){ const vv=visualViewport; const h=vv?vv.height:innerHeight; doc
 setVH(); if(window.visualViewport){ visualViewport.addEventListener('resize', setVH, {passive:true}); visualViewport.addEventListener('scroll', setVH, {passive:true}); }
 addEventListener('orientationchange', ()=>setTimeout(setVH, 250), {passive:true});
 
-/* ========================= canvas setup ========================= */
+/* ========================= canvas & sizing ========================= */
 const cvs = document.getElementById('c');
 const ctx = cvs.getContext('2d', { alpha:false, desynchronized:true });
 function vp(){ const vv=visualViewport; return vv?{w:Math.floor(vv.width), h:Math.floor(vv.height)}:{w:innerWidth|0, h:innerHeight|0}; }
 let {w:W, h:H} = vp();
 let DPR = 1;
-function resize(){
-  const v = vp(); W=v.w; H=v.h; DPR=Math.max(1, Math.min(3, devicePixelRatio||1));
-  cvs.style.width = W+'px'; cvs.style.height = H+'px';
-  cvs.width = Math.floor(W*DPR); cvs.height = Math.floor(H*DPR);
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  calcCamera();
-  layoutControls();
-}
-addEventListener('resize', resize, {passive:true});
 
-/* ========================= camera and projection =========================
-   World uses depth z in [0..1], where z=1 is at the player (near),
-   z=0 is at the horizon (far). We linearly lerp lane centers and widths.
-*/
+/* ========================= camera & projection ========================= */
 const CAM = {
   horizonY: 0, groundY: 0,
   farHalf: 0,   nearHalf: 0,
@@ -97,134 +96,373 @@ const CAM = {
 function calcCamera(){
   CAM.horizonY = Math.round(H * 0.26);
   CAM.groundY  = Math.round(H * 0.92);
-  CAM.farHalf  = Math.max(70,  Math.min(W*0.20, 150)); // road half width at horizon
-  CAM.nearHalf = Math.max(180, Math.min(W*0.46, 320)); // road half width near player
+  CAM.farHalf  = Math.max(70,  Math.min(W*0.20, 160)); // road half width at horizon
+  CAM.nearHalf = Math.max(190, Math.min(W*0.48, 340)); // road half width near player
 
   const lanes = 3;
   const laneFarW  = (CAM.farHalf  * 2) / lanes;
   const laneNearW = (CAM.nearHalf * 2) / lanes;
 
   for(let i=0;i<lanes;i++){
-    const xFar1  = (W/2 - CAM.farHalf)  + i*laneFarW + laneFarW/2;
-    const xNear1 = (W/2 - CAM.nearHalf) + i*laneNearW + laneNearW/2;
-    CAM.farCenters[i]  = xFar1;
-    CAM.nearCenters[i] = xNear1;
+    const xFar  = (W/2 - CAM.farHalf)  + i*laneFarW + laneFarW/2;
+    const xNear = (W/2 - CAM.nearHalf) + i*laneNearW + laneNearW/2;
+    CAM.farCenters[i]  = xFar;
+    CAM.nearCenters[i] = xNear;
   }
 }
-// project lane index and depth z→screen x,y and a size scale
 function project(lane, z){
-  const u = z;                 // u near
-  const v = 1 - z;             // v far
+  const u = z, v = 1-z;
   const x = CAM.nearCenters[lane]*u + CAM.farCenters[lane]*v;
   const y = CAM.groundY*u + CAM.horizonY*v;
-  // perspective scale: small at far, big near, smooth curve
-  const s = 0.35*v + 1.00*u;   // about 0.35 at far, 1.0 near
+  const s = 0.35*v + 1.00*u;  // scale near/far
   return { x, y, s };
 }
 
-/* ========================= scene art ========================= */
-function sky(){
-  // sky gradient
-  const g = ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0, '#6db6ff');
-  g.addColorStop(0.5,'#89d0ff');
-  g.addColorStop(0.65,'#b9e7ff');
-  g.addColorStop(1, '#6fbf54');
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,W,H);
+/* ========================= resizing ========================= */
+function layoutControls(){
+  const btnL = document.getElementById('left');
+  const btnR = document.getElementById('right');
+  const y = Math.min(H-10, H - Math.min(120, H*.12));
+  const lx=[W/4, W/2, (3*W)/4];
+  btnL.style.left = lx[0]+'px'; btnL.style.top = y+'px';
+  btnR.style.left = lx[2]+'px'; btnR.style.top = y+'px';
+}
+function resize(){
+  const v = vp(); W=v.w; H=v.h; DPR=Math.max(1, Math.min(3, devicePixelRatio||1));
+  cvs.style.width = W+'px'; cvs.style.height = H+'px';
+  cvs.width = Math.floor(W*DPR); cvs.height = Math.floor(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  calcCamera(); initVisuals(); layoutControls();
+}
+addEventListener('resize', resize, {passive:true});
 
-  // mountains
-  const baseY = CAM.horizonY + 18;
-  ctx.fillStyle = '#4d6aa3';
-  ctx.beginPath();
-  ctx.moveTo(0, baseY+20);
-  const peaks = 6, span = W/(peaks-1);
-  for(let i=0;i<peaks;i++){
-    const px = i*span;
-    const py = baseY - 30 - Math.sin(i*1.3)*26 - (i%2?30:0);
-    ctx.lineTo(px, py);
+/* ========================= utilities ========================= */
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function mix(hex1, hex2, a){
+  const c1 = parseInt(hex1.slice(1),16), c2=parseInt(hex2.slice(1),16);
+  const r=((c1>>16)&255)*(1-a)+((c2>>16)&255)*a|0;
+  const g=((c1>>8)&255)*(1-a)+((c2>>8)&255)*a|0;
+  const b=((c1)&255)*(1-a)+((c2)&255)*a|0;
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ========================= visual textures ========================= */
+let TEX = { grass:null, path:null, noise:null, stars:null };
+function initVisuals(){
+  TEX.noise  = makeNoiseTex(256,256, 0.65);
+  TEX.grass  = makeGrassTex(512,512);
+  TEX.path   = makePathTex(512,512);
+  TEX.stars  = makeStarTex(512,512);
+}
+function makeNoiseTex(w,h,contrast=0.6){
+  const off = new OffscreenCanvas(w,h), ox = off.getContext('2d');
+  const id = ox.createImageData(w,h); const a=id.data;
+  for(let y=0,i=0;y<h;y++) for(let x=0;x<w;x++,i+=4){
+    const r = Math.random(); const v = Math.pow(r, contrast); const u = (v*255)|0;
+    a[i]=a[i+1]=a[i+2]=u; a[i+3]=255;
   }
-  ctx.lineTo(W, baseY+20);
-  ctx.closePath(); ctx.fill();
-
-  // parallax clouds
-  const t = performance.now()*0.00006;
-  drawCloud(W*(0.1+(t%1)), CAM.horizonY-80, 120);
-  drawCloud(W*(0.55+((t*1.2)%1)), CAM.horizonY-58, 160);
-  drawCloud(W*(0.85+((t*0.7)%1))-W, CAM.horizonY-100, 110);
+  ox.putImageData(id,0,0);
+  ox.globalAlpha = .5; ox.drawImage(off, -1,0,w+2,h); ox.drawImage(off, 0,-1,w,h+2);
+  return off;
 }
-function drawCloud(x,y,r){
-  ctx.save(); ctx.globalAlpha = .85;
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(x,y,r*.36,0,Math.PI*2);
-  ctx.arc(x+r*.24,y+6,r*.28,0,Math.PI*2);
-  ctx.arc(x-r*.20,y+8,r*.26,0,Math.PI*2);
-  ctx.arc(x+r*.02,y-10,r*.22,0,Math.PI*2);
-  ctx.fill(); ctx.restore();
+function makeStarTex(w,h){
+  const off = new OffscreenCanvas(w,h), ox = off.getContext('2d');
+  ox.fillStyle = 'black'; ox.fillRect(0,0,w,h);
+  for(let i=0;i<800;i++){
+    const x = Math.random()*w, y=Math.random()*h;
+    const a = 0.6 + Math.random()*0.4;
+    ox.globalAlpha = a;
+    ox.fillStyle = (Math.random()<0.1) ? '#ffdca8' : '#ffffff';
+    ox.beginPath(); ox.arc(x,y, Math.random()<0.7? 0.8 : 1.2, 0, Math.PI*2); ox.fill();
+  }
+  return off;
+}
+function makeGrassTex(w,h){
+  const off = new OffscreenCanvas(w,h), ox = off.getContext('2d');
+  const g = ox.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#63c054'); g.addColorStop(1,'#3d8f3e');
+  ox.fillStyle=g; ox.fillRect(0,0,w,h);
+  ox.lineCap='round';
+  for(let layer=0; layer<2; layer++){
+    ox.globalAlpha = layer?0.22:0.34;
+    ox.strokeStyle = layer?'#2f7a31':'#4aa346';
+    for(let i=0;i<1100;i++){
+      const x = Math.random()*w, y = Math.random()*h;
+      const len = 12 + Math.random()*22, tilt = (Math.random()*0.6-0.3);
+      ox.lineWidth = 1 + Math.random()*1.2;
+      ox.beginPath(); ox.moveTo(x,y);
+      ox.quadraticCurveTo(x-4*tilt, y-len*0.6, x-8*tilt, y-len); ox.stroke();
+    }
+  }
+  ox.globalAlpha = .22; ox.drawImage(TEX.noise, 0,0,w,h);
+  return off;
+}
+function makePathTex(w,h){
+  const off = new OffscreenCanvas(w,h), ox = off.getContext('2d');
+  const g = ox.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#8e6f56'); g.addColorStop(1,'#6b503e');
+  ox.fillStyle=g; ox.fillRect(0,0,w,h);
+
+  const id = ox.getImageData(0,0,w,h), a=id.data;
+  for(let i=0;i<a.length;i+=4){
+    const n = Math.random();
+    if(n > 0.86){
+      const tint = 120 + (Math.random()*60|0);
+      a[i]=tint; a[i+1]=tint-10; a[i+2]=tint-35;
+    }
+  }
+  ox.putImageData(id,0,0);
+
+  ox.globalAlpha=.28; ox.fillStyle='#2d1f18';
+  for(let b=0;b<2;b++){
+    ox.beginPath(); const x = (b===0)? w*0.35 : w*0.65;
+    ox.ellipse(x, h*0.55, w*0.20, h*0.55, 0, 0, Math.PI*2); ox.fill();
+  }
+  const hg = ox.createLinearGradient(0,0,0,h);
+  hg.addColorStop(0,'rgba(255,230,180,.25)'); hg.addColorStop(1,'rgba(255,230,180,0)');
+  ox.globalCompositeOperation='overlay'; ox.fillStyle=hg; ox.fillRect(0,0,w,h);
+  ox.globalCompositeOperation='source-over';
+  ox.globalAlpha=.18; ox.drawImage(TEX.noise,0,0,w,h);
+  return off;
 }
 
-function drawGroundAndRoad(){
-  // grass
-  const gg = ctx.createLinearGradient(0,CAM.horizonY,0,H);
-  gg.addColorStop(0,'#67ba52'); gg.addColorStop(1,'#3e8f3e');
-  ctx.fillStyle = gg; ctx.fillRect(0,CAM.horizonY,W,H-CAM.horizonY);
+/* ========================= day/night & owl ========================= */
+const DAY = { cycleSec: 150, t: 0, phase: 0, night: 0 };
+const OWL = { active:false, x:0, y:0, vx:0, flap:0 };
 
-  // road body trapezoid
-  const leftFar  = W/2 - CAM.farHalf,  rightFar  = W/2 + CAM.farHalf;
-  const leftNear = W/2 - CAM.nearHalf, rightNear = W/2 + CAM.nearHalf;
+function updateDayNight(dt){
+  DAY.t = (DAY.t + dt) % DAY.cycleSec;
+  DAY.phase = (DAY.t / DAY.cycleSec);
+  const distFromMidnight = Math.min(
+    Math.abs(DAY.phase - 0.75),
+    Math.abs(DAY.phase + 0.25)
+  );
+  DAY.night = clamp(1 - (distFromMidnight / 0.25), 0, 1);
 
-  const road = ctx.createLinearGradient(0,CAM.horizonY,0,CAM.groundY);
-  road.addColorStop(0,'#8c6b50');
-  road.addColorStop(1,'#6f523f');
-  ctx.fillStyle = road;
+  if (!OWL.active && DAY.night > 0.65 && Math.random() < 0.004){
+    OWL.active = true;
+    OWL.x = -120; OWL.y = CAM.horizonY - 80 - Math.random()*40;
+    OWL.vx = 140 + Math.random()*80; OWL.flap = Math.random()*Math.PI*2;
+  }
+  if (OWL.active){
+    OWL.x += OWL.vx * dt; OWL.flap += 6.5*dt; OWL.y += Math.sin(OWL.flap*0.7)*10*dt;
+    if (OWL.x > W + 120) OWL.active = false;
+  }
+}
+
+/* ========================= sky & mountains ========================= */
+function drawCloudLayer(speed, y, scale){
+  const t = (performance.now()*0.00002*W*speed) % (W+600);
+  for(let i=-1;i<3;i++){ drawCloudBlob(-t + i*(W/1.2 + 320), y, 140*scale, 9); }
+}
+function drawCloudBlob(x,y,r,blobs=8){
+  ctx.save();
+  ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.moveTo(leftFar, CAM.horizonY);
-  ctx.lineTo(rightFar, CAM.horizonY);
-  ctx.lineTo(rightNear, CAM.groundY);
-  ctx.lineTo(leftNear, CAM.groundY);
-  ctx.closePath(); ctx.fill();
+  for(let i=0;i<blobs;i++){
+    const a = (i/blobs)*Math.PI*2;
+    const rx = r*(0.28+Math.random()*0.1);
+    const ry = r*(0.20+Math.random()*0.1);
+    ctx.ellipse(x + Math.cos(a)*r*0.4, y + Math.sin(a)*r*0.18, rx, ry, 0, 0, Math.PI*2);
+  }
+  ctx.fill();
+  ctx.globalCompositeOperation='destination-in';
+  ctx.drawImage(TEX.noise, x-r, y-r, r*2, r*2);
+  ctx.restore();
+}
+function drawMountainsBeautiful(){
+  const layers = [
+    { col:'#3b5183', h:38, amp:28, off:0.0, fog:0.55 },
+    { col:'#4a6296', h:22, amp:22, off:0.7, fog:0.38 },
+    { col:'#5b75aa', h:10, amp:16, off:1.4, fog:0.24 },
+  ];
+  const base = CAM.horizonY + 12;
+  const t = performance.now()*0.00012;
+  layers.forEach(L=>{
+    ctx.beginPath(); ctx.moveTo(0, base+60);
+    const peaks = 8, span = W/(peaks-1);
+    for(let i=0;i<peaks;i++){
+      const px = i*span;
+      const y = base - L.h - Math.sin(i*1.3 + t + L.off)*L.amp - (i%2?L.h*0.6:0);
+      ctx.lineTo(px,y);
+    }
+    ctx.lineTo(W, base+60); ctx.closePath();
+    const grd = ctx.createLinearGradient(0, base-120, 0, base+30);
+    grd.addColorStop(0, mix(L.col,'#e9f6ff', L.fog* (1-DAY.night*0.6)));
+    grd.addColorStop(1, L.col);
+    ctx.fillStyle = grd; ctx.fill();
+  });
+}
+function drawOwl(x,y,s=1){
+  const flap = Math.sin(OWL.flap)*8*s;
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle = '#2b2f44';
+  ctx.beginPath(); ctx.ellipse(0,0, 18*s, 14*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0,-12*s, 8*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ffd26a';
+  ctx.beginPath(); ctx.arc(-3*s,-12*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 3*s,-12*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#f2a03a';
+  ctx.beginPath(); ctx.moveTo(0,-8*s); ctx.lineTo(2*s,-6*s); ctx.lineTo(-2*s,-6*s); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#282d42';
+  ctx.beginPath(); ctx.ellipse(-18*s, -2*s, 16*s, 6*s+flap*0.2, 0.1, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 18*s, -2*s, 16*s, 6*s-flap*0.2, -0.1, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawSkyBeautiful(){
+  const n = DAY.night;
+  const dayTop='#1a3c74', dayMid='#6fb6ff', dayLow='#e9f6ff';
+  const nightTop='#0b1030', nightMid='#121a46', nightLow='#1a274f';
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0.00, mix(dayTop,  nightTop,  n));
+  g.addColorStop(0.50, mix(dayMid,  nightMid,  n));
+  g.addColorStop(0.86, mix(dayLow,  nightLow,  n));
+  g.addColorStop(1.00, mix('#d6f0c8', '#0e1330', n));
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
 
-  // lane lines that truly converge
+  if (n > 0){
+    const alpha = 0.3 + 0.7*n;
+    ctx.save(); ctx.globalAlpha = alpha;
+    const tile = TEX.stars; const t = (performance.now()*0.005) % tile.height;
+    for(let y=-tile.height; y<H+tile.height; y+=tile.height){
+      for(let x=0; x<W; x+=tile.width){ ctx.drawImage(tile, x, y + t - tile.height, tile.width, tile.height); }
+    }
+    ctx.restore();
+  }
+
+  ctx.save(); ctx.globalAlpha = 0.08*(1 - 0.6*n);
+  for(let i=0;i<7;i++){
+    const yy = (i/7)*CAM.horizonY*1.2 + 10;
+    const band = ctx.createLinearGradient(0,yy-24,0,yy+24);
+    band.addColorStop(0,'rgba(255,255,255,0)');
+    band.addColorStop(.5,'rgba(255,255,255,.8)');
+    band.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = band; ctx.fillRect(0,yy-24,W,48);
+  }
+  ctx.restore();
+
+  // Sun and Moon
+  const ang = (DAY.phase*2*Math.PI) - Math.PI/2;
+  const skyR = Math.min(W,H)*0.42;
+  const cx = W*0.5, cy = CAM.horizonY - Math.min(140, H*0.14);
+
+  // Sun
+  const sunPos = { x: cx + Math.cos(ang)*skyR, y: cy + Math.sin(ang)*skyR };
+  const sunVis = Math.max(0, 1 - n*1.2);
+  if (sunVis > 0.02){
+    const sunR = Math.min(W,H)*0.06;
+    const sgrad = ctx.createRadialGradient(sunPos.x,sunPos.y,0, sunPos.x,sunPos.y,sunR*1.6);
+    sgrad.addColorStop(0,'#fff7b8'); sgrad.addColorStop(.55,'#ffd46a'); sgrad.addColorStop(1,'rgba(255,210,90,0)');
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha = sunVis;
+    ctx.fillStyle=sgrad; ctx.beginPath(); ctx.arc(sunPos.x,sunPos.y,sunR*1.6,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = sunVis*0.22;
+    const tR = performance.now()*0.00045, rays = 22;
+    for(let i=0;i<rays;i++){
+      const a = ((i/rays)*Math.PI*2) + tR*1.8; const r0 = sunR*0.5, r1 = sunR*2.2;
+      ctx.beginPath(); ctx.moveTo(sunPos.x + Math.cos(a)*r0, sunPos.y + Math.sin(a)*r0);
+      ctx.lineTo(sunPos.x + Math.cos(a)*r1, sunPos.y + Math.sin(a)*r1);
+      ctx.lineWidth = 3 + Math.sin(tR*4+i)*1.2; ctx.strokeStyle = 'rgba(255,240,180,0.45)'; ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Moon
+  const moonAng = ang + Math.PI;
+  const moonPos = { x: cx + Math.cos(moonAng)*skyR, y: cy + Math.sin(moonAng)*skyR };
+  const moonVis = Math.max(0, n*1.05 - 0.02);
+  if (moonVis > 0.02){
+    const r = Math.min(W,H)*0.05; ctx.save(); ctx.globalAlpha = 0.85*moonVis;
+    ctx.fillStyle = '#f7f7ff'; ctx.beginPath(); ctx.arc(moonPos.x, moonPos.y, r, 0, Math.PI*2); ctx.fill();
+    ctx.globalCompositeOperation='destination-out'; ctx.beginPath();
+    ctx.arc(moonPos.x + r*0.4, moonPos.y - r*0.15, r*0.96, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  }
+
+  // Clouds (dim at night), Mountains, Horizon haze
+  const cloudDim = lerp(1.0, 0.65, n); ctx.save(); ctx.globalAlpha = cloudDim;
+  drawCloudLayer(0.35, CAM.horizonY-110, 0.80);
+  drawCloudLayer(0.65, CAM.horizonY-80,  1.00);
+  drawCloudLayer(0.95, CAM.horizonY-58,  1.25); ctx.restore();
+
+  drawMountainsBeautiful();
+
+  const hz = ctx.createLinearGradient(0, CAM.horizonY-30, 0, CAM.horizonY+60);
+  hz.addColorStop(0, (n<0.5)?'rgba(255,255,255,.35)':'rgba(180,200,255,.28)');
+  hz.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = hz; ctx.fillRect(0, CAM.horizonY-30, W, 90);
+
+  // Owl at night
+  if (OWL.active && DAY.night > 0.4){ drawOwl(OWL.x, OWL.y, 1.0); }
+}
+
+/* ========================= ground & road ========================= */
+function drawGroundAndRoadBeautiful(){
+  // Grass tiles
+  const tile = TEX.grass, th=tile.height;
+  for(let y=CAM.horizonY; y<H; y+=th){ ctx.drawImage(tile, 0, y, W, th); }
+  // Night cool tint
+  if (DAY.night > 0){
+    ctx.save(); ctx.globalAlpha = 0.18 * DAY.night; ctx.fillStyle = '#102244';
+    ctx.fillRect(0, CAM.horizonY, W, H-CAM.horizonY); ctx.restore();
+  }
+
+  // Road trapezoid
+  const lf = W/2 - CAM.farHalf, rf = W/2 + CAM.farHalf;
+  const ln = W/2 - CAM.nearHalf, rn = W/2 + CAM.nearHalf;
+
+  const pat = ctx.createPattern(TEX.path,'repeat');
+  ctx.save(); ctx.beginPath();
+  ctx.moveTo(lf, CAM.horizonY); ctx.lineTo(rf, CAM.horizonY); ctx.lineTo(rn, CAM.groundY); ctx.lineTo(ln, CAM.groundY);
+  ctx.closePath(); ctx.clip();
+  ctx.fillStyle = pat;
+  const t = (performance.now()*0.03)%TEX.path.height;
+  ctx.translate(0, -t); ctx.fillRect(0, CAM.horizonY, W, H); ctx.restore();
+
+  if (DAY.night > 0){
+    ctx.save(); ctx.globalAlpha = 0.12 * DAY.night; ctx.fillStyle = '#18223a';
+    ctx.beginPath(); ctx.moveTo(lf, CAM.horizonY); ctx.lineTo(rf, CAM.horizonY); ctx.lineTo(rn, CAM.groundY); ctx.lineTo(ln, CAM.groundY); ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+
+  // Lane lines
   ctx.strokeStyle='rgba(0,0,0,.22)'; ctx.lineWidth=2;
-  const lanes = 3, laneFarW=(CAM.farHalf*2)/lanes, laneNearW=(CAM.nearHalf*2)/lanes;
+  const lanes=3, laneFarW=(CAM.farHalf*2)/lanes, laneNearW=(CAM.nearHalf*2)/lanes;
   for(let i=1;i<lanes;i++){
-    const x1 = (W/2 - CAM.farHalf)  + i*laneFarW;
-    const x2 = (W/2 - CAM.nearHalf) + i*laneNearW;
+    const x1=(W/2-CAM.farHalf)+i*laneFarW, x2=(W/2-CAM.nearHalf)+i*laneNearW;
     ctx.beginPath(); ctx.moveTo(x1, CAM.horizonY); ctx.lineTo(x2, CAM.groundY); ctx.stroke();
   }
 
-  // soft road vignette
-  const vg = ctx.createRadialGradient(W/2, H*.62, Math.min(W,H)*.22, W/2, H*.62, Math.max(W,H)*.88);
-  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.36)');
-  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+  // Edge highlights
+  const edge = ctx.createLinearGradient(0,CAM.horizonY,0,CAM.groundY);
+  edge.addColorStop(0,'rgba(255,255,255,.10)'); edge.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.strokeStyle=edge; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(lf, CAM.horizonY); ctx.lineTo(ln, CAM.groundY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rf, CAM.horizonY); ctx.lineTo(rn, CAM.groundY); ctx.stroke();
+
+  // Vignette
+  const vg = ctx.createRadialGradient(W/2, H*.64, Math.min(W,H)*.22, W/2, H*.64, Math.max(W,H)*.92);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.40)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
 }
 
 /* ========================= entities ========================= */
 function withShadow(color, blur, oy, fn){
   ctx.save(); ctx.shadowColor=color; ctx.shadowBlur=blur; ctx.shadowOffsetX=0; ctx.shadowOffsetY=oy; fn(); ctx.restore();
 }
+function blobShadow(x,y,s,alpha=0.35){
+  ctx.save(); ctx.globalAlpha = alpha; const w = 46*s, h = 14*s;
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(x, y+8*s, w, h, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+}
 function drawTree(x,y,s){
   const w=42*s, h=76*s;
   withShadow('rgba(0,0,0,.35)', 10, 5, ()=>{
-    // trunk
     ctx.fillStyle = '#6d3f17';
     const tw = w*.28, th = h*.52, tx = x - tw/2, ty = y + h*.12, r = tw*.35;
     ctx.beginPath();
-    ctx.moveTo(tx+r,ty);
-    ctx.lineTo(tx+tw-r,ty);
-    ctx.quadraticCurveTo(tx+tw,ty,tx+tw,ty+r);
-    ctx.lineTo(tx+tw,ty+th-r);
-    ctx.quadraticCurveTo(tx+tw,ty+th,tx+tw-r,ty+th);
-    ctx.lineTo(tx+r,ty+th);
-    ctx.quadraticCurveTo(tx,ty+th,tx,ty+th-r);
-    ctx.lineTo(tx,ty+r);
-    ctx.quadraticCurveTo(tx,ty,tx+r,ty);
-    ctx.closePath(); ctx.fill();
-
-    // crown
-    ctx.fillStyle = '#2f8c34';
-    ctx.beginPath(); ctx.arc(x, y-h*.06, h*.34, 0, Math.PI*2); ctx.fill();
+    ctx.moveTo(tx+r,ty); ctx.lineTo(tx+tw-r,ty); ctx.quadraticCurveTo(tx+tw,ty,tx+tw,ty+r);
+    ctx.lineTo(tx+tw,ty+th-r); ctx.quadraticCurveTo(tx+tw,ty+th,tx+tw-r,ty+th);
+    ctx.lineTo(tx+r,ty+th); ctx.quadraticCurveTo(tx,ty+th,tx,ty+th-r);
+    ctx.lineTo(tx,ty+r); ctx.quadraticCurveTo(tx,ty,tx+r,ty); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2f8c34'; ctx.beginPath(); ctx.arc(x, y-h*.06, h*.34, 0, Math.PI*2); ctx.fill();
   });
 }
 function drawMud(x,y,s){
@@ -235,249 +473,237 @@ function drawMud(x,y,s){
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x,y,w*.5,h*.5,0,0,Math.PI*2); ctx.fill();
   });
 }
-function drawPickupMouse(x,y,s){
-  const t=performance.now()*0.006, wob=Math.sin(t+x*.01)*1.2*s;
-  withShadow('rgba(0,0,0,.25)', 6, 2, ()=>{
-    ctx.fillStyle='#c7a17a';
-    ctx.beginPath(); ctx.ellipse(x,y+wob,12*s,7*s,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x+9*s,y-1*s+wob,6*s,5*s,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#d8d9dd'; ctx.beginPath(); ctx.arc(x+12*s,y-5*s+wob,2.8*s,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x+7.5*s,y-6*s+wob,2.2*s,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='#b78963'; ctx.lineWidth=1.4*s;
-    ctx.beginPath(); ctx.moveTo(x-12*s,y+2*s+wob); ctx.quadraticCurveTo(x-18*s,y+6*s+wob,x-22*s,y+3*s+wob); ctx.stroke();
-    ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(x+11*s,y-2*s+wob,1.4*s,0,Math.PI*2); ctx.fill();
-  });
-}
-function drawPickupBird(x,y,s){
-  const flap = Math.sin(performance.now()*0.02 + x*0.03)*6*s;
-  withShadow('rgba(0,0,0,.25)',6,2,()=>{
-    ctx.fillStyle='#8ec0ff'; ctx.beginPath(); ctx.ellipse(x,y,12*s,7*s,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#b9d9ff';
-    ctx.save(); ctx.translate(x-6*s,y-4*s); ctx.rotate(flap*0.02);
-    ctx.beginPath(); ctx.ellipse(0,0,8*s,4*s,0,0,Math.PI*2); ctx.fill(); ctx.restore();
-    ctx.fillStyle='#ffb74d'; ctx.beginPath(); ctx.moveTo(x+10*s,y); ctx.lineTo(x+16*s,y-2*s); ctx.lineTo(x+10*s,y-4*s); ctx.closePath(); ctx.fill();
-    ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(x+2*s,y-2*s,1.4*s,0,Math.PI*2); ctx.fill();
-  });
+function drawPickupMouse(x,y,s,gold){
+  const t = performance.now()*0.006;
+  const bob = Math.sin(t*3) * 1.5*s;
+  const tailFlick = Math.sin(t*6) * 3*s;
+  const body = gold ? '#ffd54f' : '#c7a17a';
+  const ear  = gold ? '#ffe082' : '#d7b894';
+
+  ctx.save(); ctx.translate(x,y+bob);
+  ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0,0, 12*s,7*s,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(9*s,-1*s, 7*s,6*s,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=ear; ctx.beginPath(); ctx.arc(13*s,-6*s, 2.6*s,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7*s,-6.5*s, 2.0*s,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(10*s,-2*s,1.3*s,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle=gold ? '#ffe082' : '#9a7d63';
+  ctx.lineWidth=1.5*s; ctx.beginPath();
+  ctx.moveTo(-10*s,2*s); ctx.quadraticCurveTo(-18*s, 5*s+tailFlick, -24*s, 1*s); ctx.stroke();
+  ctx.restore();
+  if(gold) addGlow(x,y,22*s,.85);
 }
 function drawPickupBolt(x,y,s){
-  const base = 24*s;
-  ctx.save(); ctx.translate(x,y);
-  const glow = ctx.createRadialGradient(0,0,0,0,0,base*1.6);
-  glow.addColorStop(0,'rgba(255,235,120,.9)'); glow.addColorStop(1,'rgba(255,235,120,0)');
-  ctx.globalCompositeOperation='lighter';
-  ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,0,base*1.6,0,Math.PI*2); ctx.fill();
+  const base = 24*s; ctx.save(); ctx.translate(x,y);
+  const glow = ctx.createRadialGradient(0,0,0,0,0,base*1.6); glow.addColorStop(0,'rgba(255,235,120,.9)'); glow.addColorStop(1,'rgba(255,235,120,0)');
+  ctx.globalCompositeOperation='lighter'; ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(0,0,base*1.6,0,Math.PI*2); ctx.fill();
   ctx.globalCompositeOperation='source-over';
   const g = ctx.createLinearGradient(0,-base,0,base);
   g.addColorStop(0,'#fff9bf'); g.addColorStop(.5,'#ffd864'); g.addColorStop(1,'#ffb300');
   ctx.fillStyle=g; ctx.beginPath();
   ctx.moveTo(0,-base*.9); ctx.lineTo(8,-base*.1); ctx.lineTo(2,-base*.1);
   ctx.lineTo(14, base*.7); ctx.lineTo(-4, base*.05); ctx.lineTo(2, base*.05);
-  ctx.closePath(); ctx.fill();
-  ctx.restore();
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function addGlow(x,y,r,a=.9){
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,`rgba(255,235,120,${a})`); g.addColorStop(1,'rgba(255,235,120,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.restore();
 }
 
-/* player cat, clean shape */
-function drawCat(x,y,s){
-  const w=50*s, h=40*s; const t=performance.now()*0.006;
-  const bob = Math.sin(t*3)*1.0*s;
-  withShadow('rgba(0,0,0,.4)', 12, 5, ()=>{
-    // body
-    ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.ellipse(x, y+bob, w*.55, h*.48, 0, 0, Math.PI*2); ctx.fill();
-    // stripe
-    ctx.fillStyle='rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(x, y-2*s+bob, w*.44, h*.16, 0, 0, Math.PI*2); ctx.fill();
+/* ===== Cat (in-game) – walk cycle + tail sway ===== */
+function drawCatVector(x,y,scale=1){
+  const t = performance.now()*0.006;
+  const step = Math.sin(t*4);
+  const stepOpp = Math.sin(t*4 + Math.PI);
+  const bob = Math.sin(t*2) * 2 * scale;
+  const sway = Math.sin(t*2.5) * 0.25;
 
-    // head
-    const hx = x + w*.34, hy = y - h*.46 + bob, r = h*.40;
-    ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.arc(hx,hy,r,0,Math.PI*2); ctx.fill();
-    // ears
-    ctx.beginPath(); ctx.moveTo(hx-r*.25,hy-r*.85); ctx.lineTo(hx-r*.02,hy-r*.38); ctx.lineTo(hx-r*.62,hy-r*.32); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(hx+r*.12,hy-r*.90); ctx.lineTo(hx+r*.36,hy-r*.36); ctx.lineTo(hx-r*.02,hy-r*.40); ctx.closePath(); ctx.fill();
-    // eyes
-    ctx.fillStyle='#1a1a1a';
-    ctx.beginPath(); ctx.ellipse(hx-r*.22, hy-r*.02, r*.12, r*.10, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hx+r*.18, hy-r*.00, r*.12, r*.10, 0, 0, Math.PI*2); ctx.fill();
-    // mouth
-    ctx.strokeStyle='#7b3f1a'; ctx.lineWidth=1.6*s;
-    ctx.beginPath(); ctx.moveTo(hx, hy+r*.10); ctx.lineTo(hx, hy+r*.20); ctx.stroke();
-    // whiskers
-    ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=1.4*s;
-    ctx.beginPath(); ctx.moveTo(hx+r*.02, hy+r*.12); ctx.lineTo(hx+r*.50, hy+r*.02); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(hx-r*.02, hy+r*.12); ctx.lineTo(hx-r*.50, hy+r*.02); ctx.stroke();
-    // paws
-    ctx.fillStyle='#c7772e';
-    ctx.beginPath(); ctx.ellipse(x-w*.18, y+h*.50, w*.22, h*.10, 0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x+w*.12,  y+h*.50, w*.22, h*.10, 0,0,Math.PI*2); ctx.fill();
-    // tail
-    ctx.strokeStyle='#b56a2a'; ctx.lineCap='round'; ctx.lineWidth=6*s;
-    ctx.beginPath(); ctx.moveTo(x-w*.62, y+h*.12+bob);
-    ctx.quadraticCurveTo(x-w*.72, y-h*.22, x-w*.18, y-h*.08);
-    ctx.quadraticCurveTo(x-w*.02, y+h*.22, x+w*.02, y+h*.18);
-    ctx.stroke();
-  });
+  ctx.save(); ctx.translate(x,y+bob); ctx.scale(scale,scale);
+  // body
+  ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.ellipse(0,0, 34, 22, 0,0,Math.PI*2); ctx.fill();
+  // legs
+  ctx.fillStyle='#c7772e';
+  ctx.beginPath(); ctx.ellipse(-12, 18 + step*3, 7, 6, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 12, 18 + stepOpp*3, 7, 6, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-20, 10 + stepOpp*3, 6, 5, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 20, 10 + step*3, 6, 5, 0,0,Math.PI*2); ctx.fill();
+  // head
+  ctx.save(); ctx.translate(28, -10 + bob*0.3);
+  ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.arc(0,0, 14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1a1a1a'; ctx.beginPath(); ctx.ellipse(-4,-2, 2.5,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 4,-2, 2.5,3,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7b3f1a'; ctx.beginPath(); ctx.moveTo(0,2); ctx.lineTo(-2,5); ctx.lineTo(2,5); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // tail
+  ctx.save(); ctx.translate(-32, -6); ctx.rotate(sway);
+  ctx.strokeStyle='#b56a2a'; ctx.lineWidth=7; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-18,-8, -34, -4); ctx.stroke(); ctx.restore();
+  ctx.restore();
+}
+function drawCatAtPlayer(){
+  const p = project(currentLane, 1.0);
+  blobShadow(p.x, CAM.groundY-18, 1.0);
+  drawCatVector(p.x, CAM.groundY-18, 1.0);
+}
+
+/* ===== Front screen cat + mouse ===== */
+function drawFrontMouse(x,y,s){
+  const t = performance.now()*0.006; const bob = Math.sin(t*3) * 2*s; const tailFlick = Math.sin(t*6) * 4*s;
+  ctx.save(); ctx.translate(x,y+bob);
+  ctx.fillStyle = '#b5b7bb'; ctx.beginPath(); ctx.ellipse(0,0, 14*s, 8*s, 0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#cfd1d4'; ctx.beginPath(); ctx.ellipse(12*s,-2*s, 8*s, 7*s, 0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d8d9dd'; ctx.beginPath(); ctx.arc(16*s,-8*s, 3*s, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(9*s,-9*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(13*s,-3*s, 1.6*s,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#9a9ba1'; ctx.lineWidth=2*s; ctx.beginPath(); ctx.moveTo(-12*s,3*s); ctx.quadraticCurveTo(-20*s, 6*s+tailFlick, -28*s, 2*s); ctx.stroke();
+  ctx.restore();
+}
+function drawFrontCat(x,y,scale=1){
+  const t = performance.now()*0.006;
+  const step = Math.sin(t*4), stepOpp = Math.sin(t*4 + Math.PI);
+  const bob = Math.sin(t*2) * 2.6 * scale, sway = Math.sin(t*2.5) * 0.35;
+  ctx.save(); ctx.translate(x,y+bob); ctx.scale(scale,scale);
+  ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.ellipse(0,0, 42, 28, 0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#c7772e';
+  ctx.beginPath(); ctx.ellipse(-16, 24 + step*3, 8, 7, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 16, 24 + stepOpp*3, 8, 7, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-26, 14 + stepOpp*3, 7, 6, 0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 26, 14 + step*3, 7, 6, 0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(42, -16 + bob*0.4);
+  ctx.fillStyle='#d9862f'; ctx.beginPath(); ctx.arc(0,0, 18,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1a1a1a'; ctx.beginPath(); ctx.ellipse(-5,-2, 3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 5,-2, 3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7b3f1a'; ctx.beginPath(); ctx.moveTo(0,4); ctx.lineTo(-3,7); ctx.lineTo(3,7); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-2,2); ctx.lineTo(-22,-2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-2,6); ctx.lineTo(-22,4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 2,2); ctx.lineTo( 22,-2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 2,6); ctx.lineTo( 22,4); ctx.stroke();
+  ctx.restore();
+  ctx.save(); ctx.translate(-40, -10); ctx.rotate(sway);
+  ctx.strokeStyle='#b56a2a'; ctx.lineWidth=8; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-24,-10, -46,-6); ctx.stroke(); ctx.restore();
+  ctx.restore();
 }
 
 /* ========================= game state ========================= */
 let mode = 'front';
 let currentLane = 1;
-let enemies=[], pickups=[], particles=[];
+let enemies=[], pickups=[];
 let score=0, fuel=100, meters=0;
-let speed = 0.42;           // base forward speed
-let speedGain = 0.00008;
-let spawnTimer = 0;
+let speed = 0.42, speedGain = 0.00008, spawnTimer = 0;
 
-let dash=false, dashTime=0;
-const DASH_DUR=7.5, DASH_SPEED=1.28, DASH_SCORE=2;
-
+const SPAWN_GAP = 0.58;   // seconds
 function reset(){
-  enemies.length=0; pickups.length=0; particles.length=0;
-  score=0; fuel=100; meters=0;
-  speed=0.42; spawnTimer=0; currentLane=1;
-  dash=false; dashTime=0;
+  enemies.length=0; pickups.length=0;
+  score=0; fuel=100; meters=0; speed=0.42; spawnTimer=0; currentLane=1;
 }
+function spawnEnemy(){ const lane=(Math.random()*3)|0; const type=Math.random()<0.55?'tree':'mud'; enemies.push({lane, z:0, type}); }
+function spawnPickup(){ const lane=(Math.random()*3)|0; const r=Math.random(); const type=r<.18?'bolt':'mouse'; pickups.push({lane, z:0, type, golden:Math.random()<.22}); }
 
-/* spawn helpers */
-const SPAWN_GAP = 0.58;
-function spawnEnemy(){
-  const lane = (Math.random()*3)|0;
-  const type = Math.random()<0.55 ? 'tree' : 'mud';
-  enemies.push({ lane, z: 0, type, life:1 });
-}
-function spawnPickup(){
-  const lane = (Math.random()*3)|0;
-  const r=Math.random(); let type;
-  if(r<.12) type='bolt';
-  else if(r<.55) type='mouse';
-  else type='bird';
-  pickups.push({ lane, z: 0, type, life:1 });
-}
-
-/* ========================= update ========================= */
 function update(dt){
-  if(mode!=='game') return;
+  if(mode!=='game') { updateDayNight(dt); return; }
 
-  const mul = dash?DASH_SPEED:1;
-  const dps = speed*mul;
-  speed += speedGain;
+  updateDayNight(dt);
 
+  const dps = speed; speed += speedGain;
   spawnTimer += dt;
-  if(spawnTimer > (dash?SPAWN_GAP*0.82:SPAWN_GAP)){
-    spawnTimer = 0;
-    if(Math.random()<0.65) spawnEnemy(); else spawnPickup();
-  }
+  if(spawnTimer > SPAWN_GAP){ spawnTimer=0; if(Math.random()<0.65) spawnEnemy(); else spawnPickup(); }
 
-  enemies.forEach(e=> e.z = Math.min(1.15, e.z + dps*dt));
-  pickups.forEach(p=> p.z = Math.min(1.15, p.z + dps*dt));
+  enemies.forEach(e=> e.z=Math.min(1.15, e.z + dps*dt));
+  pickups.forEach(p=> p.z=Math.min(1.15, p.z + dps*dt));
   enemies = enemies.filter(e=> e.z < 1.16);
   pickups = pickups.filter(p=> p.z < 1.16);
 
-  // collisions when near the player
-  const hitZ = 0.96;
+  const hitZ=0.96;
   for(let i=enemies.length-1;i>=0;i--){
     const e=enemies[i];
-    if(e.z >= hitZ && e.lane===currentLane){
+    if(e.z>=hitZ && e.lane===currentLane){
       enemies.splice(i,1);
-      if(e.type==='mud'){ fuel=Math.max(0,fuel-10); score=Math.max(0,score-(dash?1:2)); }
+      if(e.type==='mud'){ fuel=Math.max(0,fuel-10); score=Math.max(0,score-2); }
       else { end(); return; }
     }
   }
   for(let i=pickups.length-1;i>=0;i--){
     const p=pickups[i];
-    if(p.z >= hitZ && p.lane===currentLane){
+    if(p.z>=hitZ && p.lane===currentLane){
       pickups.splice(i,1);
-      if(p.type==='bolt'){ dash=true; dashTime=DASH_DUR; score+=8*DASH_SCORE; fuel=Math.min(100,fuel+6); }
-      else if(p.type==='mouse'){ score+=(dash?6:3); fuel=Math.min(100,fuel+10); }
-      else if(p.type==='bird'){ score+=(dash?6:3); fuel=Math.min(100,fuel+10); }
+      if(p.type==='bolt'){ score+=8; fuel=Math.min(100,fuel+6); }
+      else if(p.type==='mouse'){ score+= p.golden?10:4; fuel=Math.min(100,fuel+(p.golden?16:10)); }
     }
   }
 
-  if(dash){
-    dashTime-=dt; if(dashTime<=0){ dash=false; dashTime=0; }
-  }
-
   meters += (dps*dt)*180;
-  fuel -= dt*(dash?2.4:2.0);
-  if(fuel<=0) { end(); return; }
+  fuel -= dt*2.0; if(fuel<=0){ end(); return; }
+
+  // HUD
+  document.getElementById('hudScore').textContent='Score: '+Math.round(score);
+  document.getElementById('hudFuel').textContent ='Energy: '+Math.round(fuel);
+  document.getElementById('hudDist').textContent ='Meters: '+Math.round(meters);
 }
 
-/* ========================= draw ========================= */
 function draw(){
-  // background first
-  sky();
-  drawGroundAndRoad();
+  drawSkyBeautiful();
+  drawGroundAndRoadBeautiful();
 
   if(mode==='front'){
-    // a subtle preview cat at player position
-    const P = project(currentLane, 1.0);
-    drawCat(P.x, CAM.groundY-18, 1.0);
+    // front chase
+    const groundY = H - 16;
+    const scale = Math.min(1.15, Math.max(0.9, W/720));
+    const mouseXBase = (performance.now()*0.06)%(W*0.86+220);
+    const pathW = W*0.86, pathL=(W-pathW)/2;
+    const mouseX = pathL - 80 + mouseXBase;
+    const catX = mouseX - 110, catY = groundY - 48*scale;
+    drawFrontCat(catX, catY, scale);
+    drawFrontMouse(mouseX, groundY-14, 1.2);
+
+    // subtle vignette over start scene (already have global vignette)
     return;
   }
 
-  // gather drawables and depth sort by z far to near
+  // gameplay drawables sorted by depth
   const drawables=[];
   for(const e of enemies) drawables.push({z:e.z, lane:e.lane, kind:'e', t:e.type});
-  for(const p of pickups) drawables.push({z:p.z, lane:p.lane, kind:'p', t:p.type});
+  for(const p of pickups) drawables.push({z:p.z, lane:p.lane, kind:'p', t:p.type, golden:p.golden});
   drawables.sort((a,b)=> a.z - b.z);
 
   for(const d of drawables){
     const P = project(d.lane, d.z);
-    if(d.kind==='e'){
-      if(d.t==='tree') drawTree(P.x, P.y, P.s);
-      else drawMud(P.x, P.y, P.s);
-    }else{
-      if(d.t==='mouse') drawPickupMouse(P.x, P.y, P.s);
-      else if(d.t==='bird') drawPickupBird(P.x, P.y, P.s);
-      else drawPickupBolt(P.x, P.y, P.s);
-    }
+    const fade = Math.min(1, Math.max(0, d.z)); ctx.save(); ctx.globalAlpha *= (0.55 + 0.45*fade);
+    if(d.kind==='e'){ if(d.t==='tree'){ drawTree(P.x,P.y,P.s); } else { drawMud(P.x,P.y,P.s); } }
+    else { if(d.t==='mouse') drawPickupMouse(P.x,P.y,P.s,d.golden); else drawPickupBolt(P.x,P.y,P.s); }
+    ctx.restore();
   }
 
-  // player
-  const PP = project(currentLane, 1.0);
-  drawCat(PP.x, CAM.groundY-18, 1.0);
-
-  // HUD
-  ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.font='16px system-ui, sans-serif';
-  ctx.fillText('Score: '+Math.round(score), 12, 22);
-  ctx.fillText('Energy: '+Math.round(fuel), 12, 42);
-  ctx.fillText('Meters: '+Math.round(meters), 12, 62);
-
-  if(dash){
-    const t='DASH '+dashTime.toFixed(1)+'s';
-    const tw=ctx.measureText(t).width;
-    ctx.fillStyle='#ffeb3b'; ctx.fillText(t, (W-tw)/2, 22);
-  }
+  drawCatAtPlayer();
 }
 
-/* ========================= flow ========================= */
-function start(){ reset(); mode='game'; ui(); }
-function end(){ mode='front'; ui(); }
-function ui(){
-  document.getElementById('front').hidden = (mode==='game');
-  document.getElementById('controls').hidden = !(mode==='game') || matchMedia('(min-width:900px)').matches;
-  layoutControls();
-}
-document.getElementById('start').addEventListener('click', start);
-
-/* ========================= input ========================= */
-let keyLock=false;
-addEventListener('keydown', e=>{
-  if(mode!=='game') return;
-  if(e.key==='ArrowLeft'){ if(!keyLock && currentLane>0) currentLane--; keyLock=true; }
-  else if(e.key==='ArrowRight'){ if(!keyLock && currentLane<2) currentLane++; keyLock=true; }
-});
-addEventListener('keyup', e=>{ if(e.key==='ArrowLeft'||e.key==='ArrowRight') keyLock=false; });
-
+/* ========================= flow & UI ========================= */
+const front = document.getElementById('front');
+const controls = document.getElementById('controls');
+const startBtn = document.getElementById('start');
 const btnL = document.getElementById('left');
 const btnR = document.getElementById('right');
-function layoutControls(){
-  const y = Math.min(H-10, H - Math.min(120, H*.12));
-  const lx=[W/4, W/2, (3*W)/4];
-  btnL.style.left = lx[0]+'px'; btnL.style.top = y+'px';
-  btnR.style.left = lx[2]+'px'; btnR.style.top = y+'px';
+const hudS = document.getElementById('hudScore');
+const hudF = document.getElementById('hudFuel');
+const hudM = document.getElementById('hudDist');
+
+function ui(){
+  const onGame = (mode==='game');
+  front.hidden = onGame;
+  controls.hidden = !onGame;
+  hudS.hidden = hudF.hidden = hudM.hidden = !onGame;
+  layoutControls();
 }
+function start(){ reset(); mode='game'; ui(); }
+function end(){ mode='front'; ui(); }
+
+startBtn.addEventListener('click', start);
+
+/* Mobile-only: no swipe, no keyboard */
 btnL.addEventListener('pointerdown', ()=>{ if(mode==='game' && currentLane>0) currentLane--; });
 btnR.addEventListener('pointerdown', ()=>{ if(mode==='game' && currentLane<2) currentLane++; });
 
-/* ========================= game loop ========================= */
+/* ========================= loop ========================= */
 let last;
 function loop(ts){
   if(last==null) last=ts;
@@ -487,9 +713,7 @@ function loop(ts){
 }
 
 /* boot */
-resize();
-ui();
-requestAnimationFrame(loop);
+resize(); ui(); requestAnimationFrame(loop);
 </script>
 </body>
 </html>
