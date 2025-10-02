@@ -91,6 +91,36 @@ function setVH(){ const vv=window.visualViewport; const h=vv?vv.height:innerHeig
 setVH(); if(window.visualViewport){ visualViewport.addEventListener('resize',setVH,{passive:true}); visualViewport.addEventListener('scroll',setVH,{passive:true}); }
 addEventListener('orientationchange',()=>setTimeout(setVH,250),{passive:true});
 
+/* ========================= (MOVED UP) Pseudo-3D camera ========================= */
+const CAM = {
+  horizonY: 0, groundY: 0,
+  farHalf: 0,   nearHalf: 0,
+  farCenters: [0,0,0],
+  nearCenters: [0,0,0],
+  persp: 1,
+};
+function calcCamera(){
+  CAM.horizonY = Math.round(H*0.28);
+  CAM.groundY  = Math.round(H*0.88);
+  CAM.farHalf  = Math.max(60, Math.min(W*0.18, 140));
+  CAM.nearHalf = Math.max(160, Math.min(W*0.42, 280));
+  for(let i=0;i<3;i++){
+    const f = -CAM.farHalf + (i)*(CAM.farHalf*2)/2;
+    const n = -CAM.nearHalf + (i)*(CAM.nearHalf*2)/2;
+    CAM.farCenters[i]=W/2 + f;
+    CAM.nearCenters[i]=W/2 + n;
+  }
+  CAM.persp = 1;
+}
+// Convert lane & depth t∈[0..1] to screen (x,y,scale).
+function project(lane, t){
+  const u = 1 - t; // near = 1
+  const x = CAM.farCenters[lane]*(t) + CAM.nearCenters[lane]*u;
+  const y = CAM.horizonY*(t) + CAM.groundY*u;
+  const scale = 0.42*t + 1.0*u; // ≈ 0.42 .. 1.0
+  return {x,y,scale};
+}
+
 /* ========================= Canvas setup ========================= */
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
@@ -115,39 +145,6 @@ function positionButtons(){
   btnRight.style.left=lx[2]+'px'; btnRight.style.top=y+'px';
 }
 positionButtons();
-
-/* ========================= Pseudo-3D camera ========================= */
-const CAM = {
-  horizonY: 0, groundY: 0,
-  farHalf: 0,   nearHalf: 0,
-  farCenters: [0,0,0],
-  nearCenters: [0,0,0],
-  persp: 1, // used for scale lerp curve
-};
-function calcCamera(){
-  CAM.horizonY = Math.round(H*0.28);
-  CAM.groundY  = Math.round(H*0.88);
-  CAM.farHalf  = Math.max(60, Math.min(W*0.18, 140));   // road half-width at horizon
-  CAM.nearHalf = Math.max(160, Math.min(W*0.42, 280));  // road half-width near player
-  for(let i=0;i<3;i++){
-    const f = -CAM.farHalf + (i)*(CAM.farHalf*2)/2;
-    const n = -CAM.nearHalf + (i)*(CAM.nearHalf*2)/2;
-    CAM.farCenters[i]=W/2 + f;
-    CAM.nearCenters[i]=W/2 + n;
-  }
-  CAM.persp = 1; // we’ll use simple lerps for stability
-}
-calcCamera();
-
-// Convert lane & depth t∈[0..1] to screen (x,y,scale).
-function project(lane, t){
-  const u = 1 - t; // near = 1
-  const x = CAM.farCenters[lane]*(t) + CAM.nearCenters[lane]*u;
-  const y = CAM.horizonY*(t) + CAM.groundY*u;
-  // Scale starts small at far, larger near. Tuned for readability.
-  const scale = 0.42*t + 1.0*u; // ≈ 0.42 .. 1.0
-  return {x,y,scale};
-}
 
 /* ========================= Game state ========================= */
 let mode='front';
@@ -381,7 +378,6 @@ function drawLizardP(x,y,s,gold){ const wiggle=Math.sin(performance.now()*0.02 +
 function drawChickenP(x,y,s,gold){ withShadow('rgba(0,0,0,.25)',6,2,()=>{ ctx.fillStyle=gold?'#fff1a8':'#fff'; ctx.beginPath(); ctx.ellipse(x,y,14*s,10*s,0,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(x+10*s,y-6*s,8*s,7*s,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ff5b5b'; ctx.beginPath(); ctx.arc(x+12*s,y-12*s,3*s,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffa726'; ctx.fillRect(x+6*s,y+8*s,3*s,6*s); ctx.fillRect(x+11*s,y+8*s,3*s,6*s); ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(x+12*s,y-7*s,1.6*s,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffa000'; ctx.beginPath(); ctx.moveTo(x+18*s,y-6*s); ctx.lineTo(x+24*s,y-8*s); ctx.lineTo(x+18*s,y-10*s); ctx.closePath(); ctx.fill(); }); if(gold) addGlow(x,y,22*s,.8); }
 
 /* ========================= Cat (in-game, vector 3/4) ========================= */
-/* Switch to 'sprite' later if you add images; keep 'vector' now. */
 const CAT_MODE = 'vector';
 function drawCatVector(x,y,scale=1){
   const w=44*scale, h=36*scale; const t=performance.now()*0.006; const bob=Math.sin(t*3)*1.2*scale;
@@ -417,9 +413,8 @@ function drawCatVector(x,y,scale=1){
   });
 }
 function drawCatAtPlayer(){
-  // Player screen anchor ~ bottom center of road
   const px = CAM.nearCenters[currentLane];
-  const py = CAM.groundY - 18; // keep a bit above bottom
+  const py = CAM.groundY - 18;
   drawCatVector(px, py, 1.0);
 }
 
@@ -435,7 +430,6 @@ function drawHUD(){
   ctx.fillText('Energy: '+Math.round(fuel),10,42);
   ctx.fillText('Meters: '+Math.round(meters),10,62);
 
-  // Lives & shields
   if(cheatLives>0){
     const label=`♥ x${cheatLives}`;
     withShadow('rgba(0,0,0,.45)',12,4,()=>{ ctx.font='700 16px system-ui,sans-serif'; ctx.fillStyle='#ff6fa3'; const tw=ctx.measureText(label).width; ctx.fillText(label,W - tw - 12,22); });
@@ -465,7 +459,7 @@ function drawHUD(){
 }
 
 /* ========================= Spawning with depth 't' ========================= */
-const SPAWN_GAP = 0.58; // seconds baseline
+const SPAWN_GAP = 0.58;
 function spawnEnemy(){
   const lane = Math.floor(Math.random()*3);
   const type = Math.random()<0.55 ? 'tree' : 'mud';
@@ -490,7 +484,6 @@ let spawnTimer=0;
 function update(dt){
   if(mode==='front') return;
 
-  // movement speed increases slowly
   const mul = dashActive ? DASH_SPEED_MUL : 1;
   const dps = speed * mul;
   speed += speedGain;
@@ -507,13 +500,11 @@ function update(dt){
   enemies = enemies.filter(e=> e.t > -0.05);
   pickups = pickups.filter(p=> p.t > -0.05);
 
-  // collisions near the player when t is close to 0 (near end)
-  const hitWindow = 0.07; // how close to screen-base counts as overlapping
+  const hitWindow = 0.07;
   const pxLane = currentLane;
 
   if(graceTimer>0) graceTimer=Math.max(0,graceTimer-dt);
 
-  // Enemies
   if(graceTimer<=0){
     for(let i=enemies.length-1;i>=0;i--){
       const e=enemies[i];
@@ -531,7 +522,6 @@ function update(dt){
     }
   }
 
-  // Pickups
   for(let i=pickups.length-1;i>=0;i--){
     const p=pickups[i];
     if(Math.abs(p.t) < hitWindow && p.lane===pxLane){
@@ -568,7 +558,6 @@ function draw(){
 
   drawRoad();
 
-  // Sort everything far→near by t
   const drawables=[];
   for(const e of enemies){ drawables.push({t:e.t, lane:e.lane, kind:'enemy', type:e.type}); }
   for(const p of pickups){ drawables.push({t:p.t, lane:p.lane, kind:'pickup', type:p.type, golden:p.golden}); }
@@ -593,7 +582,6 @@ function draw(){
   drawParticles();
   drawHUD();
 
-  // vignette
   const vg=ctx.createRadialGradient(W/2,H*.60,Math.min(W,H)*.22,W/2,H*.60,Math.max(W,H)*.78); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.38)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
 }
 
@@ -670,4 +658,3 @@ requestAnimationFrame(safeLoop);
   </script>
 </body>
 </html>
-
